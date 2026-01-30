@@ -34,6 +34,10 @@ const getCountryCoverImageFallbackUrl = (country: Country) => {
 };
 
 const getCountryFlagImageUrl = (country: Country) => {
+  return `/flags/svg/${country.code.toLowerCase()}.svg`;
+};
+
+const getCountryFlagFallbackPngImageUrl = (country: Country) => {
   return `/flags/${country.code.toLowerCase()}.png`;
 };
 
@@ -308,6 +312,13 @@ const App: React.FC = () => {
                         if (step === '1') {
                           img.dataset.fallbackStep = '2';
                           img.src = getCountryFlagImageUrl(country);
+                          img.style.filter = '';
+                          return;
+                        }
+
+                        if (step === '2') {
+                          img.dataset.fallbackStep = '3';
+                          img.src = getCountryFlagFallbackPngImageUrl(country);
                           img.style.filter = '';
                           return;
                         }
