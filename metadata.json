@@ -1,0 +1,7 @@
+{
+  "name": "Wanderlust Journal",
+  "description": "An elegant, editorial-style travel tracker to document your journey across the globe with checklists, dates, and personal photo albums.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
