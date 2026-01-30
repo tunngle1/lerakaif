@@ -34,7 +34,7 @@ const getCountryCoverImageFallbackUrl = (country: Country) => {
 };
 
 const getCountryFlagImageUrl = (country: Country) => {
-  return `https://flagcdn.com/w640/${country.code.toLowerCase()}.png`;
+  return `/flags/${country.code.toLowerCase()}.png`;
 };
 
 type CountryExtra = {
@@ -61,11 +61,52 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : {};
   });
   const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
-  const [lightboxPhoto, setLightboxPhoto] = useState<string | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [countryExtraByCode, setCountryExtraByCode] = useState<Record<string, CountryExtra>>(() => {
     const cached = localStorage.getItem('country_extra_v1');
     return cached ? JSON.parse(cached) : {};
   });
+
+  const lightboxPhotos = selectedCountry ? (userData[selectedCountry.code]?.photos || []) : [];
+  const lightboxPhoto = (lightboxIndex != null && lightboxIndex >= 0 && lightboxIndex < lightboxPhotos.length)
+    ? lightboxPhotos[lightboxIndex]
+    : null;
+
+  const closeLightbox = () => setLightboxIndex(null);
+
+  const showPrevLightbox = () => {
+    if (lightboxIndex == null) return;
+    if (lightboxPhotos.length === 0) return;
+    setLightboxIndex((lightboxIndex - 1 + lightboxPhotos.length) % lightboxPhotos.length);
+  };
+
+  const showNextLightbox = () => {
+    if (lightboxIndex == null) return;
+    if (lightboxPhotos.length === 0) return;
+    setLightboxIndex((lightboxIndex + 1) % lightboxPhotos.length);
+  };
+
+  useEffect(() => {
+    if (lightboxIndex == null) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeLightbox();
+        return;
+      }
+      if (e.key === 'ArrowLeft') {
+        showPrevLightbox();
+        return;
+      }
+      if (e.key === 'ArrowRight') {
+        showNextLightbox();
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [lightboxIndex, lightboxPhotos.length]);
 
   useEffect(() => {
     localStorage.setItem('wanderlust_data', JSON.stringify(userData));
@@ -178,7 +219,7 @@ const App: React.FC = () => {
       <header className="px-6 pt-8 pb-8 bg-white md:px-24 md:pt-12">
         <div className="flex flex-col items-start gap-4 mb-8">
           <h1 className="text-4xl sm:text-5xl md:text-7xl font-serif font-light leading-tight">
-            Лера путешественница
+            TraveLera
           </h1>
           <div className="w-full h-px bg-black opacity-10 mt-4"></div>
         </div>
@@ -259,6 +300,7 @@ const App: React.FC = () => {
 
                         if (step === '0') {
                           img.dataset.fallbackStep = '1';
+                          img.style.filter = '';
                           img.src = getCountryCoverImageFallbackUrl(country);
                           return;
                         }
@@ -266,6 +308,7 @@ const App: React.FC = () => {
                         if (step === '1') {
                           img.dataset.fallbackStep = '2';
                           img.src = getCountryFlagImageUrl(country);
+                          img.style.filter = '';
                           return;
                         }
                       }}
@@ -390,7 +433,7 @@ const App: React.FC = () => {
                         src={photo}
                         alt="Memory"
                         className="w-full h-full object-cover cursor-zoom-in"
-                        onClick={() => setLightboxPhoto(photo)}
+                        onClick={() => setLightboxIndex(idx)}
                       />
                       <button 
                         onClick={(e) => { e.stopPropagation(); removePhoto(selectedCountry.code, idx); }}
@@ -415,17 +458,44 @@ const App: React.FC = () => {
       {lightboxPhoto && (
         <div
           className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4"
-          onClick={() => setLightboxPhoto(null)}
+          onClick={closeLightbox}
         >
           <button
             className="absolute top-4 right-4 p-3 text-white/90 hover:text-white transition-all"
             onClick={(e) => {
               e.stopPropagation();
-              setLightboxPhoto(null);
+              closeLightbox();
             }}
           >
             <X className="w-6 h-6" />
           </button>
+
+          {lightboxPhotos.length > 1 && (
+            <button
+              className="absolute left-2 md:left-6 top-1/2 -translate-y-1/2 p-3 text-white/90 hover:text-white transition-all"
+              onClick={(e) => {
+                e.stopPropagation();
+                showPrevLightbox();
+              }}
+              aria-label="Предыдущее фото"
+            >
+              <ChevronRight className="w-7 h-7 rotate-180" />
+            </button>
+          )}
+
+          {lightboxPhotos.length > 1 && (
+            <button
+              className="absolute right-2 md:right-6 top-1/2 -translate-y-1/2 p-3 text-white/90 hover:text-white transition-all"
+              onClick={(e) => {
+                e.stopPropagation();
+                showNextLightbox();
+              }}
+              aria-label="Следующее фото"
+            >
+              <ChevronRight className="w-7 h-7" />
+            </button>
+          )}
+
           <img
             src={lightboxPhoto}
             alt="Фото"
