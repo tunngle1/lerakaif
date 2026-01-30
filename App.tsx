@@ -66,6 +66,7 @@ const App: React.FC = () => {
   });
   const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [storageError, setStorageError] = useState<string | null>(null);
   const [countryExtraByCode, setCountryExtraByCode] = useState<Record<string, CountryExtra>>(() => {
     const cached = localStorage.getItem('country_extra_v1');
     return cached ? JSON.parse(cached) : {};
@@ -113,7 +114,12 @@ const App: React.FC = () => {
   }, [lightboxIndex, lightboxPhotos.length]);
 
   useEffect(() => {
-    localStorage.setItem('wanderlust_data', JSON.stringify(userData));
+    try {
+      localStorage.setItem('wanderlust_data', JSON.stringify(userData));
+      if (storageError) setStorageError(null);
+    } catch {
+      setStorageError('Не удалось сохранить данные. Возможно, закончилось место в памяти браузера. Попробуй удалить несколько фото или загружать меньшие.');
+    }
   }, [userData]);
 
   useEffect(() => {
@@ -185,14 +191,63 @@ const App: React.FC = () => {
     }));
   };
 
-  const addPhoto = (code: string, photo: string) => {
-    setUserData(prev => ({
-      ...prev,
-      [code]: {
-        ...prev[code],
-        photos: [...(prev[code]?.photos || []), photo]
-      }
-    }));
+  const addPhoto = (code: string, photoDataUrl: string) => {
+    setUserData(prev => {
+      const current = prev[code] || { visited: false, date: '', photos: [] };
+      return {
+        ...prev,
+        [code]: {
+          ...current,
+          photos: [...(current.photos || []), photoDataUrl]
+        }
+      };
+    });
+  };
+
+  const addPhotos = (code: string, photoDataUrls: string[]) => {
+    if (photoDataUrls.length === 0) return;
+    setUserData(prev => {
+      const current = prev[code] || { visited: false, date: '', photos: [] };
+      return {
+        ...prev,
+        [code]: {
+          ...current,
+          photos: [...(current.photos || []), ...photoDataUrls]
+        }
+      };
+    });
+  };
+
+  const compressImageToDataUrl = (file: File, maxSize = 1600, quality = 0.82) => {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('read_failed'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('image_decode_failed'));
+        img.onload = () => {
+          const { width, height } = img;
+          const scale = Math.min(1, maxSize / Math.max(width, height));
+          const targetW = Math.max(1, Math.round(width * scale));
+          const targetH = Math.max(1, Math.round(height * scale));
+
+          const canvas = document.createElement('canvas');
+          canvas.width = targetW;
+          canvas.height = targetH;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('canvas_failed'));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, targetW, targetH);
+
+          const out = canvas.toDataURL('image/jpeg', quality);
+          resolve(out);
+        };
+        img.src = reader.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
   const removePhoto = (code: string, index: number) => {
@@ -206,19 +261,31 @@ const App: React.FC = () => {
     });
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, code: string) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        addPhoto(code, reader.result as string);
-      };
-      reader.readAsDataURL(file);
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, code: string) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const next: string[] = [];
+    for (const file of files) {
+      try {
+        const dataUrl = await compressImageToDataUrl(file);
+        next.push(dataUrl);
+      } catch {
+        setStorageError('Не удалось обработать одно из фото. Попробуй другое изображение.');
+      }
     }
+
+    addPhotos(code, next);
+    e.target.value = '';
   };
 
   return (
     <div className="min-h-screen pb-20 md:pb-0 md:pl-0">
+      {storageError && (
+        <div className="px-6 py-4 bg-white border-b border-black/5 text-sm opacity-80 md:px-24">
+          {storageError}
+        </div>
+      )}
       {/* Header Section - Editorial Look */}
       <header className="px-6 pt-8 pb-8 bg-white md:px-24 md:pt-12">
         <div className="flex flex-col items-start gap-4 mb-8">
@@ -428,6 +495,7 @@ const App: React.FC = () => {
                       type="file" 
                       className="hidden" 
                       accept="image/*"
+                      multiple
                       onChange={(e) => handleFileChange(e, selectedCountry.code)}
                     />
                   </label>
